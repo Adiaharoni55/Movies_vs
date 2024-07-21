@@ -16,10 +16,14 @@
 #include <map>
 #include <atomic>
 #include "thread_safe_queue.h"
+#include <set>
+#include <fstream>
+#include <filesystem>
 
+namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-struct Movie {
+typedef struct Movie {
     std::string title;
     std::string producer;
     std::string release_year;
@@ -28,7 +32,9 @@ struct Movie {
     std::vector<std::string> cast;
     std::string poster_url;
     GLuint texture_id = 0;
-};
+    std::string rating;     // New field for IMDb rating
+    std::string votes;      // New field for number of votes
+} Movie;
 
 struct ImageData {
     unsigned char* data = nullptr;
@@ -43,17 +49,38 @@ std::condition_variable cv;
 std::queue<std::string> image_queue;
 std::atomic<bool> image_thread_running(true);
 std::map<std::string, ImageData> textureMap;
-
+std::vector<Movie> watch_list;
+std::set<std::string> watch_list_titles;
 GLFWwindow* window;
-
+std::string current_user;
+std::string users_directory = "C:/Users/user/CLionProjects/CPPProjects/FinalProject/users/";
 bool FetchMovieInfo(Movie &movie, std::string &image_url, bool &connection_error);
 void LoadImageFromUrl(const std::string& url);
 void ImageLoadingThread();
 void FetchMovieList(const std::string &title, const std::string &year, ThreadSafeQueue<Movie> &movie_queue, bool &connection_error);
 void CreateTexture(const std::string& url);
 bool ReloadFont(float size);
-ImFont* PrepareNewFont(float size);
-bool ApplyNewFont(ImFont* newFont);
+void AddToWatchList(const Movie& movie);
+bool RemoveFromWatchList(const std::string& title);
+bool IsInWatchList(const std::string& title);
+void LoadWatchList(const std::string& username);
+bool UserLogin(const std::string& username) ;
+void SaveWatchList();
+void Logout();
+
+bool RemoveFromWatchList(const std::string& title) {
+    auto it = std::remove_if(watch_list.begin(), watch_list.end(),
+                             [&title](const Movie& movie) { return movie.title == title; });
+    if (it != watch_list.end()) {
+        watch_list.erase(it, watch_list.end());
+        watch_list_titles.erase(title);
+        if (!current_user.empty()) {
+            SaveWatchList();
+        }
+        return true;
+    }
+    return false;
+}
 
 int main() {
     // Initialize GLFW
@@ -111,7 +138,7 @@ int main() {
     std::cout << "ImGui OpenGL3 binding initialized." << std::endl;
 
     // Load custom font
-    float currentFontSize = 20.0f;
+    float currentFontSize = 24.0f;
     if (!ReloadFont(currentFontSize)) {
         std::cerr << "Failed to load initial font. Exiting." << std::endl;
         ImGui_ImplOpenGL3_Shutdown();
@@ -125,8 +152,11 @@ int main() {
 
     std::cout << "Entering main loop." << std::endl;
 
-    bool needFontReload = false;
-    float pendingFontSize = currentFontSize;
+
+    bool movie_not_in_list = false;
+    std::string message;
+    static bool show_not_in_list_message = false;
+
 
     // Start the image loading thread
     std::cout << "Starting image loading thread." << std::endl;
@@ -144,8 +174,8 @@ int main() {
     std::atomic<bool> search_in_progress(false);
     ThreadSafeQueue<Movie> movie_queue;
     std::thread fetcher_thread;
-
-    ImFont* pendingFont = nullptr;
+    bool needFontReload = false;
+    float pendingFontSize = currentFontSize;
 
     std::cout << "Starting main loop." << std::endl;
     while (!glfwWindowShouldClose(window)) {
@@ -154,52 +184,113 @@ int main() {
         glfwPollEvents();
         std::cout << "Events polled." << std::endl;
 
-        // Apply the new font if it's ready
-        if (pendingFont != nullptr) {
-            ImGui_ImplOpenGL3_DestroyFontsTexture();
-            ImGui_ImplOpenGL3_CreateFontsTexture();
-            if (ApplyNewFont(pendingFont)) {
-                currentFontSize = pendingFontSize;
-                std::cout << "New font applied successfully." << std::endl;
-            } else {
-                std::cerr << "Failed to apply new font. Reverting to previous size." << std::endl;
-            }
-            pendingFont = nullptr;
-            needFontReload = false;
-        }
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        std::cout << "ImGui new frame created." << std::endl;
 
         // Create main ImGui window
         ImGui::Begin("Movie Information", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
         ImGui::SetWindowPos(ImVec2(0, 0));
         ImGui::SetWindowSize(ImGui::GetIO().DisplaySize);
-        std::cout << "Main window created." << std::endl;
 
-        // Font size control
+        // User Profile button (move to top right corner)
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - 150, 40));
-        ImGui::PushItemWidth(140);
-        if (ImGui::BeginCombo("Font Size", std::to_string(static_cast<int>(currentFontSize)).c_str())) {
-            std::vector<int> font_sizes = {20, 24, 28, 32, 36, 40};
-            for (int size : font_sizes) {
-                bool is_selected = (currentFontSize == size);
-                if (ImGui::Selectable(std::to_string(size).c_str(), is_selected)) {
-                    pendingFontSize = static_cast<float>(size);
-                    needFontReload = true;
+        if (ImGui::Button(current_user.empty() ? "Login" : "User Profile")) {
+            ImGui::OpenPopup("UserProfilePopup");
+        }
+
+        // Display "Hello username" at the top of the screen in the middle, above the table lines
+        if (!current_user.empty()) {
+            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
+            ImGui::SetWindowFontScale(1.5f);  // Make the text 50% larger
+
+            ImGui::SetCursorPos(ImVec2(0, 27));
+            ImGui::BeginGroup();
+            ImGui::Dummy(ImVec2(ImGui::GetWindowWidth(), 0));  // This creates full-width clickable area
+            float textWidth = ImGui::CalcTextSize(("Hello " + current_user).c_str()).x;
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - textWidth) / 2);
+            ImGui::TextColored(ImVec4(0.0f, 0.4f, 1.0f, 1.0f), "Hello %s", current_user.c_str());  // Blue color
+            ImGui::EndGroup();
+
+            ImGui::SetWindowFontScale(1.0f);  // Reset font scale
+            ImGui::PopFont();
+        }
+
+        // User Profile popup
+        if (ImGui::BeginPopup("UserProfilePopup")) {
+            static char username[256] = "";
+            if (current_user.empty()) {
+                ImGui::InputText("Username", username, IM_ARRAYSIZE(username));
+                if (ImGui::Button("Login") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+                    if (UserLogin(username)) {
+                        ImGui::CloseCurrentPopup();
+                    } else {
+                        // Handle login failure
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Login failed. Please try again.");
+                    }
                 }
-                if (is_selected) {
-                    ImGui::SetItemDefaultFocus();
+            } else {
+                ImGui::Text("Logged in as: %s", current_user.c_str());
+                if (ImGui::Button("Logout")) {
+                    Logout();
+                    memset(username, 0, sizeof(username)); // Clear the username field
+                    ImGui::CloseCurrentPopup();
                 }
             }
-            ImGui::EndCombo();
+            ImGui::EndPopup();
         }
+
+        // Login Required popup
+        if (ImGui::BeginPopup("LoginRequiredPopup")) {
+            ImGui::Text("You need to log in to add movies to your watch list.");
+            static char login_username[256] = "";
+            ImGui::InputText("Username", login_username, IM_ARRAYSIZE(login_username));
+            if (ImGui::Button("Login") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+                if (UserLogin(login_username)) {
+                    AddToWatchList(selected_movie);
+                    ImGui::CloseCurrentPopup();
+                } else {
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Login failed. Please try again.");
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Continue without login")) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        // Font size control (bottom right corner)
+        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - 150, ImGui::GetWindowHeight() - 40));
+        ImGui::PushItemWidth(140);
+
+        const char* font_sizes[] = { "16", "20", "24", "28", "32", "36" };
+        static int current_font_index = 2;  // Default to 24 (index 2 in the array)
+
+        if (ImGui::Combo("Font Size", &current_font_index, font_sizes, IM_ARRAYSIZE(font_sizes))) {
+            float new_size = std::stof(font_sizes[current_font_index]);
+            if (new_size != currentFontSize) {
+                pendingFontSize = new_size;
+                needFontReload = true;
+            }
+        }
+
         ImGui::PopItemWidth();
 
-        // Set up two columns
+// Handle font reloading
+        if (needFontReload) {
+            if (ReloadFont(pendingFontSize)) {
+                currentFontSize = pendingFontSize;
+                std::cout << "Font reloaded successfully at size " << currentFontSize << std::endl;
+            } else {
+                std::cerr << "Failed to reload font at size " << pendingFontSize << std::endl;
+            }
+            needFontReload = false;
+        }
+        // Set up two columns for movie details and search
+        ImGui::SetCursorPos(ImVec2(0, 80));
         ImGui::Columns(2, "MovieColumns", true);
 
         // Left column: Movie details
@@ -209,6 +300,8 @@ int main() {
             ImGui::Text("Year: %s", selected_movie.release_year.c_str());
             ImGui::Text("Director: %s", selected_movie.producer.c_str());
             ImGui::Text("Runtime: %s", selected_movie.runtime.c_str());
+            ImGui::Text("IMDb Rating: %s", selected_movie.rating.c_str());  // New line
+            ImGui::Text("Votes: %s", selected_movie.votes.c_str());         // New line
 
             if (!selected_movie.genres.empty()) {
                 ImGui::Text("Genres:");
@@ -239,7 +332,58 @@ int main() {
             } else {
                 ImGui::Text("Image not available");
             }
-        } else {
+
+            // Add to watch list button
+            if (ImGui::Button("Add to Watch List")) {
+                if (current_user.empty()) {
+                    ImGui::OpenPopup("LoginRequiredPopup");
+                } else {
+                    AddToWatchList(selected_movie);
+                    show_not_in_list_message = false;
+                }
+            }
+
+            // Add this popup handling code
+            if (ImGui::BeginPopup("LoginRequiredPopup")) {
+                ImGui::Text("You need to log in to add movies to your watch list.");
+                static char username[256] = "";
+                ImGui::InputText("Username", username, IM_ARRAYSIZE(username));
+                if (ImGui::Button("Login") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+                    if (UserLogin(username)) {
+                        AddToWatchList(selected_movie);
+                        ImGui::CloseCurrentPopup();
+                    } else {
+                        // Handle login failure
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Continue without login")) {
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+
+            ImGui::SameLine();
+
+            // Remove from watch list button
+            if (ImGui::Button("Remove from Watch List")) {
+                bool removed = RemoveFromWatchList(selected_movie.title);
+                show_not_in_list_message = !removed;
+            }
+
+            // Messages for watch list status
+            ImGui::BeginGroup();
+            bool in_watch_list = IsInWatchList(selected_movie.title);
+            if (in_watch_list) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Movie is in watch list");
+            } else if (show_not_in_list_message) {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "The movie is not on watch list");
+            } else {
+                ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeight())); // This ensures consistent vertical spacing
+            }
+            ImGui::EndGroup();
+        }
+        else {
             ImGui::Text("Select a movie to see details");
         }
         ImGui::EndChild();
@@ -252,12 +396,11 @@ int main() {
         // Title search
         ImGui::Text("Search by Title:");
         bool triggerSearch = ImGui::InputText("Title", title_input, IM_ARRAYSIZE(title_input),
-                                              ImGuiInputTextFlags_EnterReturnsTrue);
+                                               ImGuiInputTextFlags_EnterReturnsTrue);
 
-        // Year search
         ImGui::Text("Year (optional):");
-        ImGui::InputText("Year", year_input,
-                         IM_ARRAYSIZE(year_input)); // No flag needed, as it does not trigger search alone.
+        triggerSearch |= ImGui::InputText("Year", year_input, IM_ARRAYSIZE(year_input),
+                                          ImGuiInputTextFlags_EnterReturnsTrue);
 
         ImGui::SameLine();
         if (ImGui::Button("Search") || triggerSearch) {
@@ -271,6 +414,7 @@ int main() {
             connection_error = false;
             selected_movie_index = -1;
             search_in_progress.store(true);
+            movie_queue.clear();  // Clear the queue before starting a new search
 
             // Trigger fetching movie list based on title and use year as a filter
             fetcher_thread = std::thread([&]() {
@@ -284,7 +428,7 @@ int main() {
             while (movie_queue.pop(movie)) {
                 movie_list.push_back(movie);
             }
-            if (movie_queue.empty() && movie_queue.is_finished()) {
+            if (movie_queue.is_finished()) {
                 search_in_progress.store(false);
                 if (movie_list.empty()) {
                     movie_not_found = true;
@@ -314,7 +458,6 @@ int main() {
                 }
             }
         }
-
         // Display search results or messages
         if (search_in_progress.load()) {
             ImGui::Text("Searching...");
@@ -328,6 +471,7 @@ int main() {
                         selected_movie_index = i;
                         selected_movie = movie_list[i];
                         image_url.clear();
+                        show_not_in_list_message = false;
 
                         // Fetch detailed movie info when selected
                         bool fetch_success = FetchMovieInfo(selected_movie, image_url, connection_error);
@@ -360,38 +504,74 @@ int main() {
             ImGui::Text("Connection error occurred. Please check your internet connection and try again.");
         }
 
+        // Button to show watch list
+        ImGui::SetCursorPos(ImVec2(10, ImGui::GetCursorPosY()));
+        if (ImGui::Button("To Watch List")) {
+            ImGui::OpenPopup("WatchListPopup");
+        }
+        // Watch list popup
+        if (ImGui::BeginPopup("WatchListPopup")) {
+            ImGui::SetNextWindowPos(ImVec2(10, ImGui::GetCursorPosY()));
+            if (watch_list.empty()) {
+                ImGui::Text("Watch list is empty.");
+            } else {
+                if (ImGui::BeginTable("WatchListTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                    ImGui::TableSetupColumn("Title");
+                    ImGui::TableSetupColumn("Year");
+                    ImGui::TableHeadersRow();
+
+                    for (int i = 0; i < watch_list.size(); ++i) {
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        if (ImGui::Selectable(watch_list[i].title.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+                            selected_movie_index = i;
+                            selected_movie = watch_list[i];
+                            image_url = selected_movie.poster_url;
+
+                            // Fetch detailed movie info when selected
+                            bool fetch_success = FetchMovieInfo(selected_movie, image_url, connection_error);
+                            if (fetch_success) {
+                                // Load the image if it's not already loaded
+                                if (!image_url.empty()) {
+                                    std::unique_lock<std::mutex> lock(mtx);
+                                    if (textureMap.find(image_url) == textureMap.end()) {
+                                        image_queue.push(image_url);
+                                        cv.notify_one();
+                                    }
+                                }
+                            } else {
+                                ImGui::Text("Failed to fetch movie details. Please try again.");
+                            }
+                        }
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Text("%s", watch_list[i].release_year.c_str());
+                    }
+                    ImGui::EndTable();
+                }
+            }
+            ImGui::EndPopup();
+        }
+
         ImGui::EndChild();
         ImGui::Columns(1);
 
         ImGui::End(); // End the main "Movie Information" window
-        std::cout << "Main window ended." << std::endl;
-
-        // Prepare the new font if needed
-        if (needFontReload && pendingFont == nullptr) {
-            pendingFont = PrepareNewFont(pendingFontSize);
-        }
 
         // Rendering
         ImGui::Render();
-        std::cout << "ImGui rendered." << std::endl;
 
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
         glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
         glClear(GL_COLOR_BUFFER_BIT);
-        std::cout << "OpenGL rendering setup done." << std::endl;
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        std::cout << "ImGui draw data rendered." << std::endl;
 
         glfwSwapBuffers(window);
-        std::cout << "Buffers swapped." << std::endl;
     }
 
-    std::cout << "Main loop ended." << std::endl;
-
-// Cleanup
+    // Cleanup
     image_thread_running = false;  // Signal the image loading thread to stop
     cv.notify_all();  // Wake up the image loading thread if it's waiting
     if (image_thread.joinable()) {
@@ -402,7 +582,7 @@ int main() {
         fetcher_thread.join();  // Wait for the fetcher thread to finish if it's still running
     }
 
-// Clear any remaining items in the queue
+    // Clear any remaining items in the queue
     movie_queue.clear();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -413,7 +593,6 @@ int main() {
 
     return 0;
 }
-
 
 bool FetchMovieInfo(Movie &movie, std::string &image_url, bool &connection_error) {
     std::string api_key = "67880361"; // Replace with your OMDb API key
@@ -435,6 +614,8 @@ bool FetchMovieInfo(Movie &movie, std::string &image_url, bool &connection_error
             movie.producer = response.value("Director", "Unknown");
             movie.release_year = response.value("Year", movie.release_year);
             movie.runtime = response.value("Runtime", "Unknown");
+            movie.rating = response.value("imdbRating", "N/A");  // New line
+            movie.votes = response.value("imdbVotes", "N/A");    // New line
 
             // Handle Genre
             movie.genres.clear();
@@ -469,6 +650,17 @@ bool FetchMovieInfo(Movie &movie, std::string &image_url, bool &connection_error
     }
     connection_error = false;
     return false;
+}
+
+// Modify AddToWatchList and RemoveFromWatchList to save changes
+void AddToWatchList(const Movie& movie) {
+    if (watch_list_titles.find(movie.title) == watch_list_titles.end()) {
+        watch_list.push_back(movie);
+        watch_list_titles.insert(movie.title);
+        if (!current_user.empty()) {
+            SaveWatchList();
+        }
+    }
 }
 
 // Modify the LoadImageFromUrl function:
@@ -543,7 +735,7 @@ void ImageLoadingThread() {
 
 
 void FetchMovieList(const std::string &title, const std::string &year, ThreadSafeQueue<Movie> &movie_queue, bool &connection_error) {
-    std::string api_key = "766745cb"; // Replace with your OMDb API key
+    std::string api_key = "766745cb"; // Make sure this is your correct API key
     std::string encoded_title = httplib::detail::encode_url(title);
     std::string url = "/?s=" + encoded_title + "&type=movie&apikey=" + api_key;
 
@@ -552,6 +744,7 @@ void FetchMovieList(const std::string &title, const std::string &year, ThreadSaf
 
     if (!res) {
         connection_error = true;
+        movie_queue.setFinished();
         return;
     }
 
@@ -565,13 +758,14 @@ void FetchMovieList(const std::string &title, const std::string &year, ThreadSaf
                 movie.poster_url = item.value("Poster", "");
 
                 // Apply year filter here if specified
-                if (year.empty() || movie.release_year == year) {
+                if (year.empty() || movie.release_year.find(year) != std::string::npos) {
                     movie_queue.push(movie);
                 }
             }
             connection_error = false;
         } else {
-            connection_error = true;
+            // No movies found or error in response
+            connection_error = false; // It's not a connection error, just no results
         }
     } else {
         connection_error = true;
@@ -583,9 +777,8 @@ void FetchMovieList(const std::string &title, const std::string &year, ThreadSaf
 bool ReloadFont(float size) {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
-
-    ImFont* font = io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", size);
-    if (font == nullptr) {
+    ImFont* newFont = io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", size);
+    if (newFont == nullptr) {
         std::cerr << "Failed to load font at size " << size << std::endl;
         return false;
     }
@@ -598,38 +791,78 @@ bool ReloadFont(float size) {
     ImGui_ImplOpenGL3_DestroyFontsTexture();
     ImGui_ImplOpenGL3_CreateFontsTexture();
 
-    return true;
-}
-
-
-ImFont* PrepareNewFont(float size) {
-    ImGuiIO& io = ImGui::GetIO();
-
-    ImFont* font = io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", size);
-    if (font == nullptr) {
-        std::cerr << "Failed to prepare font at size " << size << std::endl;
-        return nullptr;
-    }
-
-    return font;
-}
-
-
-bool ApplyNewFont(ImFont* newFont) {
-    if (newFont == nullptr) return false;
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Clear();
-    io.Fonts->AddFontDefault();
-    io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", newFont->FontSize);
-
-    if (!io.Fonts->Build()) {
-        std::cerr << "Failed to build font atlas" << std::endl;
-        return false;
-    }
-
-    ImGui_ImplOpenGL3_DestroyFontsTexture();
-    ImGui_ImplOpenGL3_CreateFontsTexture();
+    io.FontDefault = newFont;
 
     return true;
 }
+
+bool IsInWatchList(const std::string& title) {
+    return watch_list_titles.find(title) != watch_list_titles.end();
+}
+
+// Add this function to load the watch list
+void LoadWatchList(const std::string& username) {
+    watch_list.clear();
+    watch_list_titles.clear();
+    fs::path user_file = fs::path(users_directory) / (username + ".txt");
+    std::ifstream file(user_file);
+    if (file.is_open()) {
+        std::string line;
+        while (std::getline(file, line)) {
+            size_t delimiter_pos = line.find('|');
+            if (delimiter_pos != std::string::npos) {
+                Movie movie;
+                movie.title = line.substr(0, delimiter_pos);
+                movie.release_year = line.substr(delimiter_pos + 1);
+                watch_list.push_back(movie);
+                watch_list_titles.insert(movie.title);
+            }
+        }
+        file.close();
+    }
+}
+
+bool UserLogin(const std::string& username) {
+    if (!fs::exists(users_directory)) {
+        fs::create_directory(users_directory);
+    }
+
+    fs::path user_file = fs::path(users_directory) / (username + ".txt");
+    if (fs::exists(user_file)) {
+        // User exists, load their watch list
+        current_user = username;
+        LoadWatchList(username);
+        return true;
+    } else {
+        // New user, create file
+        std::ofstream file(user_file);
+        if (file.is_open()) {
+            file.close();
+            current_user = username;
+            watch_list.clear();
+            watch_list_titles.clear();
+            return true;
+        }
+    }
+    return false;
+}
+
+void Logout() {
+    current_user = "";
+    watch_list.clear();
+    watch_list_titles.clear();
+}
+
+// Add this function to save the watch list
+void SaveWatchList() {
+    if (current_user.empty()) return;
+    fs::path user_file = fs::path(users_directory) / (current_user + ".txt");
+    std::ofstream file(user_file);
+    if (file.is_open()) {
+        for (const auto& movie : watch_list) {
+            file << movie.title << "|" << movie.release_year << "\n";
+        }
+        file.close();
+    }
+}
+

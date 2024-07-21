@@ -58,7 +58,7 @@ public:
         while (!queue.empty()) {
             queue.pop();
         }
-        finished = true;
+        finished = false;
     }
 };
 #endif //FINALPROJECT_THREAD_SAFE_QUEUE_H
