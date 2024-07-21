@@ -25,7 +25,7 @@ add_subdirectory(${GLFW_DIR})
 
 # Add executable
 add_executable(FinalProject
-        src/Books.cpp
+        src/movies.cpp
         src/glad.c
         src/tinyxml2.cpp
         ${IMGUI_DIR}/imgui.cpp

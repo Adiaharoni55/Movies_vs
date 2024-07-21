@@ -49,9 +49,9 @@ cmake_ninja_workdir = C$:/Users/user/CLionProjects/CPPProjects/FinalProject/cmak
 
 build cmake_object_order_depends_target_FinalProject: phony || cmake_object_order_depends_target_glfw
 
-build CMakeFiles/FinalProject.dir/src/Books.cpp.obj: CXX_COMPILER__FinalProject_unscanned_Debug C$:/Users/user/CLionProjects/CPPProjects/FinalProject/src/Books.cpp || cmake_object_order_depends_target_FinalProject
+build CMakeFiles/FinalProject.dir/src/movies.cpp.obj: CXX_COMPILER__FinalProject_unscanned_Debug C$:/Users/user/CLionProjects/CPPProjects/FinalProject/src/movies.cpp || cmake_object_order_depends_target_FinalProject
   DEFINES = -DCPPHTTPLIB_OPENSSL_SUPPORT
-  DEP_FILE = CMakeFiles\FinalProject.dir\src\Books.cpp.obj.d
+  DEP_FILE = CMakeFiles\FinalProject.dir\src\movies.cpp.obj.d
   FLAGS = -g -std=gnu++23 -fdiagnostics-color=always
   INCLUDES = -IC:/Users/user/CLionProjects/CPPProjects/FinalProject/imgui-1.90.8/imgui-1.90.8 -IC:/Users/user/CLionProjects/CPPProjects/FinalProject/imgui-1.90.8/imgui-1.90.8/backends -IC:/Users/user/CLionProjects/CPPProjects/FinalProject/glfw-3.4/glfw-3.4/include -IC:/Users/user/CLionProjects/CPPProjects/FinalProject/include -isystem C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/include
   OBJECT_DIR = CMakeFiles\FinalProject.dir
@@ -137,7 +137,7 @@ build CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/backends/imgui_impl_
 #############################################
 # Link the executable FinalProject.exe
 
-build FinalProject.exe: CXX_EXECUTABLE_LINKER__FinalProject_Debug CMakeFiles/FinalProject.dir/src/Books.cpp.obj CMakeFiles/FinalProject.dir/src/glad.c.obj CMakeFiles/FinalProject.dir/src/tinyxml2.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_demo.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_draw.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_tables.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_widgets.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/backends/imgui_impl_glfw.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/backends/imgui_impl_opengl3.cpp.obj | C$:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libssl.lib C$:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libcrypto.lib glfw-3.4/glfw-3.4/src/libglfw3.a || glfw-3.4/glfw-3.4/src/libglfw3.a
+build FinalProject.exe: CXX_EXECUTABLE_LINKER__FinalProject_Debug CMakeFiles/FinalProject.dir/src/movies.cpp.obj CMakeFiles/FinalProject.dir/src/glad.c.obj CMakeFiles/FinalProject.dir/src/tinyxml2.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_demo.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_draw.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_tables.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/imgui_widgets.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/backends/imgui_impl_glfw.cpp.obj CMakeFiles/FinalProject.dir/imgui-1.90.8/imgui-1.90.8/backends/imgui_impl_opengl3.cpp.obj | C$:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libssl.lib C$:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libcrypto.lib glfw-3.4/glfw-3.4/src/libglfw3.a || glfw-3.4/glfw-3.4/src/libglfw3.a
   FLAGS = -g
   LINK_LIBRARIES = C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libssl.lib  C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libcrypto.lib  -lws2_32  -lcrypt32  -lbcrypt  glfw-3.4/glfw-3.4/src/libglfw3.a  -lopengl32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\FinalProject.dir

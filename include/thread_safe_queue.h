@@ -52,5 +52,13 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         return queue.empty();
     }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex);
+        while (!queue.empty()) {
+            queue.pop();
+        }
+        finished = true;
+    }
 };
 #endif //FINALPROJECT_THREAD_SAFE_QUEUE_H

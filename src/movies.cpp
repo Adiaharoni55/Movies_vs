@@ -51,6 +51,9 @@ void LoadImageFromUrl(const std::string& url);
 void ImageLoadingThread();
 void FetchMovieList(const std::string &title, const std::string &year, ThreadSafeQueue<Movie> &movie_queue, bool &connection_error);
 void CreateTexture(const std::string& url);
+bool ReloadFont(float size);
+ImFont* PrepareNewFont(float size);
+bool ApplyNewFont(ImFont* newFont);
 
 int main() {
     // Initialize GLFW
@@ -58,6 +61,7 @@ int main() {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
     }
+    std::cout << "GLFW initialized successfully." << std::endl;
 
     // Create a GLFW window
     window = glfwCreateWindow(1280, 720, "Movie Info", nullptr, nullptr);
@@ -66,28 +70,71 @@ int main() {
         glfwTerminate();
         return -1;
     }
+    std::cout << "GLFW window created successfully." << std::endl;
+
     glfwMakeContextCurrent(window);
 
     // Initialize GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
+        glfwDestroyWindow(window);
+        glfwTerminate();
         return -1;
     }
+    std::cout << "GLAD initialized successfully." << std::endl;
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+    std::cout << "ImGui context created." << std::endl;
+
+    // Setup Platform/Renderer backends
+    if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
+        std::cerr << "Failed to initialize ImGui GLFW binding" << std::endl;
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
+    std::cout << "ImGui GLFW binding initialized." << std::endl;
+
+    if (!ImGui_ImplOpenGL3_Init("#version 130")) {
+        std::cerr << "Failed to initialize ImGui OpenGL3 binding" << std::endl;
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
+    std::cout << "ImGui OpenGL3 binding initialized." << std::endl;
+
+    // Load custom font
+    float currentFontSize = 20.0f;
+    if (!ReloadFont(currentFontSize)) {
+        std::cerr << "Failed to load initial font. Exiting." << std::endl;
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return -1;
+    }
+    std::cout << "Initial font loaded successfully." << std::endl;
+
+    std::cout << "Entering main loop." << std::endl;
+
+    bool needFontReload = false;
+    float pendingFontSize = currentFontSize;
 
     // Start the image loading thread
+    std::cout << "Starting image loading thread." << std::endl;
     std::thread image_thread(ImageLoadingThread);
 
     // Variables for ImGui input
     char title_input[256] = "";
-    char year_input[5] = "";  // Add this for year input
+    char year_input[5] = "";
     bool movie_not_found = false;
     bool connection_error = false;
     Movie selected_movie;
@@ -98,24 +145,64 @@ int main() {
     ThreadSafeQueue<Movie> movie_queue;
     std::thread fetcher_thread;
 
-    // Main loop
+    ImFont* pendingFont = nullptr;
+
+    std::cout << "Starting main loop." << std::endl;
     while (!glfwWindowShouldClose(window)) {
+        std::cout << "New frame started." << std::endl;
+
         glfwPollEvents();
+        std::cout << "Events polled." << std::endl;
+
+        // Apply the new font if it's ready
+        if (pendingFont != nullptr) {
+            ImGui_ImplOpenGL3_DestroyFontsTexture();
+            ImGui_ImplOpenGL3_CreateFontsTexture();
+            if (ApplyNewFont(pendingFont)) {
+                currentFontSize = pendingFontSize;
+                std::cout << "New font applied successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to apply new font. Reverting to previous size." << std::endl;
+            }
+            pendingFont = nullptr;
+            needFontReload = false;
+        }
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        std::cout << "ImGui new frame created." << std::endl;
 
-        // Create ImGui window
+        // Create main ImGui window
         ImGui::Begin("Movie Information", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
         ImGui::SetWindowPos(ImVec2(0, 0));
         ImGui::SetWindowSize(ImGui::GetIO().DisplaySize);
+        std::cout << "Main window created." << std::endl;
+
+        // Font size control
+        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - 150, 40));
+        ImGui::PushItemWidth(140);
+        if (ImGui::BeginCombo("Font Size", std::to_string(static_cast<int>(currentFontSize)).c_str())) {
+            std::vector<int> font_sizes = {20, 24, 28, 32, 36, 40};
+            for (int size : font_sizes) {
+                bool is_selected = (currentFontSize == size);
+                if (ImGui::Selectable(std::to_string(size).c_str(), is_selected)) {
+                    pendingFontSize = static_cast<float>(size);
+                    needFontReload = true;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopItemWidth();
 
         // Set up two columns
         ImGui::Columns(2, "MovieColumns", true);
 
-        // In the left column, update the movie details display:
+        // Left column: Movie details
         ImGui::BeginChild("MovieDetails", ImVec2(0, -1), true);
         if (selected_movie_index != -1 && !selected_movie.title.empty()) {
             ImGui::Text("Title: %s", selected_movie.title.c_str());
@@ -125,23 +212,23 @@ int main() {
 
             if (!selected_movie.genres.empty()) {
                 ImGui::Text("Genres:");
-                for (const auto& genre : selected_movie.genres) {
+                for (const auto &genre: selected_movie.genres) {
                     ImGui::BulletText("%s", genre.c_str());
                 }
             }
 
             if (!selected_movie.cast.empty()) {
                 ImGui::Text("Cast:");
-                for (const auto& actor : selected_movie.cast) {
+                for (const auto &actor: selected_movie.cast) {
                     ImGui::BulletText("%s", actor.c_str());
                 }
             }
 
             // Display movie poster
             if (!image_url.empty() && textureMap.find(image_url) != textureMap.end()) {
-                const auto& imageData = textureMap[image_url];
+                const auto &imageData = textureMap[image_url];
                 if (imageData.texture_id != 0) {
-                    ImGui::Image((void*)(intptr_t)imageData.texture_id, ImVec2(200, 300));
+                    ImGui::Image((void *) (intptr_t) imageData.texture_id, ImVec2(200, 300));
                 } else if (imageData.data != nullptr) {
                     // Create texture on the main thread
                     CreateTexture(image_url);
@@ -157,18 +244,20 @@ int main() {
         }
         ImGui::EndChild();
 
-
         ImGui::NextColumn();
-// Right column: Search and movie list
+
+        // Right column: Search and movie list
         ImGui::BeginChild("SearchAndList", ImVec2(0, -1), true);
 
-// Title search
+        // Title search
         ImGui::Text("Search by Title:");
-        bool triggerSearch = ImGui::InputText("Title", title_input, IM_ARRAYSIZE(title_input), ImGuiInputTextFlags_EnterReturnsTrue);
+        bool triggerSearch = ImGui::InputText("Title", title_input, IM_ARRAYSIZE(title_input),
+                                              ImGuiInputTextFlags_EnterReturnsTrue);
 
-// Year search
+        // Year search
         ImGui::Text("Year (optional):");
-        ImGui::InputText("Year", year_input, IM_ARRAYSIZE(year_input)); // No flag needed, as it does not trigger search alone.
+        ImGui::InputText("Year", year_input,
+                         IM_ARRAYSIZE(year_input)); // No flag needed, as it does not trigger search alone.
 
         ImGui::SameLine();
         if (ImGui::Button("Search") || triggerSearch) {
@@ -226,7 +315,7 @@ int main() {
             }
         }
 
-// Display search results or messages
+        // Display search results or messages
         if (search_in_progress.load()) {
             ImGui::Text("Searching...");
         } else if (!movie_list.empty()) {
@@ -272,23 +361,49 @@ int main() {
         }
 
         ImGui::EndChild();
-
         ImGui::Columns(1);
-        ImGui::End();
+
+        ImGui::End(); // End the main "Movie Information" window
+        std::cout << "Main window ended." << std::endl;
+
+        // Prepare the new font if needed
+        if (needFontReload && pendingFont == nullptr) {
+            pendingFont = PrepareNewFont(pendingFontSize);
+        }
 
         // Rendering
         ImGui::Render();
+        std::cout << "ImGui rendered." << std::endl;
+
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
         glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
         glClear(GL_COLOR_BUFFER_BIT);
+        std::cout << "OpenGL rendering setup done." << std::endl;
+
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        std::cout << "ImGui draw data rendered." << std::endl;
 
         glfwSwapBuffers(window);
+        std::cout << "Buffers swapped." << std::endl;
     }
 
-    // Cleanup
+    std::cout << "Main loop ended." << std::endl;
+
+// Cleanup
+    image_thread_running = false;  // Signal the image loading thread to stop
+    cv.notify_all();  // Wake up the image loading thread if it's waiting
+    if (image_thread.joinable()) {
+        image_thread.join();  // Wait for the image loading thread to finish
+    }
+
+    if (fetcher_thread.joinable()) {
+        fetcher_thread.join();  // Wait for the fetcher thread to finish if it's still running
+    }
+
+// Clear any remaining items in the queue
+    movie_queue.clear();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -298,6 +413,7 @@ int main() {
 
     return 0;
 }
+
 
 bool FetchMovieInfo(Movie &movie, std::string &image_url, bool &connection_error) {
     std::string api_key = "67880361"; // Replace with your OMDb API key
@@ -406,21 +522,25 @@ void CreateTexture(const std::string& url) {
     }
 }
 
-
 void ImageLoadingThread() {
+    std::cout << "Image loading thread started." << std::endl;
     while (image_thread_running) {
         std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [] { return !image_queue.empty() || !image_thread_running; });
+        std::cout << "Waiting for image to load..." << std::endl;
+        if (cv.wait_for(lock, std::chrono::seconds(1), [] { return !image_queue.empty() || !image_thread_running; })) {
+            if (!image_thread_running) break;
 
-        if (!image_thread_running) break;
+            std::string url = image_queue.front();
+            image_queue.pop();
+            lock.unlock();
 
-        std::string url = image_queue.front();
-        image_queue.pop();
-        lock.unlock();
-
-        LoadImageFromUrl(url);
+            std::cout << "Loading image from URL: " << url << std::endl;
+            LoadImageFromUrl(url);
+        }
     }
+    std::cout << "Image loading thread ended." << std::endl;
 }
+
 
 void FetchMovieList(const std::string &title, const std::string &year, ThreadSafeQueue<Movie> &movie_queue, bool &connection_error) {
     std::string api_key = "766745cb"; // Replace with your OMDb API key
@@ -458,4 +578,58 @@ void FetchMovieList(const std::string &title, const std::string &year, ThreadSaf
     }
 
     movie_queue.setFinished();
+}
+
+bool ReloadFont(float size) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+
+    ImFont* font = io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", size);
+    if (font == nullptr) {
+        std::cerr << "Failed to load font at size " << size << std::endl;
+        return false;
+    }
+
+    if (!io.Fonts->Build()) {
+        std::cerr << "Failed to build font atlas" << std::endl;
+        return false;
+    }
+
+    ImGui_ImplOpenGL3_DestroyFontsTexture();
+    ImGui_ImplOpenGL3_CreateFontsTexture();
+
+    return true;
+}
+
+
+ImFont* PrepareNewFont(float size) {
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImFont* font = io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", size);
+    if (font == nullptr) {
+        std::cerr << "Failed to prepare font at size " << size << std::endl;
+        return nullptr;
+    }
+
+    return font;
+}
+
+
+bool ApplyNewFont(ImFont* newFont) {
+    if (newFont == nullptr) return false;
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    io.Fonts->AddFontDefault();
+    io.Fonts->AddFontFromFileTTF(R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)", newFont->FontSize);
+
+    if (!io.Fonts->Build()) {
+        std::cerr << "Failed to build font atlas" << std::endl;
+        return false;
+    }
+
+    ImGui_ImplOpenGL3_DestroyFontsTexture();
+    ImGui_ImplOpenGL3_CreateFontsTexture();
+
+    return true;
 }
