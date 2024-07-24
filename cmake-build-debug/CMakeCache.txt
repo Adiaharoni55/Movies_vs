@@ -321,7 +321,7 @@ FinalProject_IS_TOP_LEVEL:STATIC=ON
 FinalProject_SOURCE_DIR:STATIC=C:/Users/user/CLionProjects/CPPProjects/FinalProject
 
 //Value Computed by CMake
-GLFW_BINARY_DIR:STATIC=C:/Users/user/CLionProjects/CPPProjects/FinalProject/cmake-build-debug/glfw-3.4/glfw-3.4
+GLFW_BINARY_DIR:STATIC=C:/Users/user/CLionProjects/CPPProjects/FinalProject/cmake-build-debug/glfw-3.4
 
 //Build the GLFW documentation
 GLFW_BUILD_DOCS:BOOL=ON
@@ -346,7 +346,7 @@ GLFW_IS_TOP_LEVEL:STATIC=OFF
 GLFW_LIBRARY_TYPE:STRING=
 
 //Value Computed by CMake
-GLFW_SOURCE_DIR:STATIC=C:/Users/user/CLionProjects/CPPProjects/FinalProject/glfw-3.4/glfw-3.4
+GLFW_SOURCE_DIR:STATIC=C:/Users/user/CLionProjects/CPPProjects/FinalProject/glfw-3.4
 
 //Force use of high-performance GPU on hybrid systems
 GLFW_USE_HYBRID_HPG:BOOL=OFF
@@ -572,7 +572,7 @@ DOXYGEN_EXECUTABLE-ADVANCED:INTERNAL=1
 //Details about finding OpenGL
 FIND_PACKAGE_MESSAGE_DETAILS_OpenGL:INTERNAL=[opengl32][c ][v()]
 //Details about finding OpenSSL
-FIND_PACKAGE_MESSAGE_DETAILS_OpenSSL:INTERNAL=[C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libcrypto.lib][C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/include][c ][v3.3.1()]
+FIND_PACKAGE_MESSAGE_DETAILS_OpenSSL:INTERNAL=[C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3.3.1/openssl-3/x64/lib/libcrypto.lib][C:/Users/user/CLionProjects/CPPProjects/FinalProject/openssl-3/x64/include][c ][v3.3.1()]
 //Details about finding Threads
 FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 //GLFW pkg-config Libs.private

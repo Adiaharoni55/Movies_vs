@@ -20,13 +20,18 @@
 #include <fstream>
 #include <filesystem>
 
+
+std::string GetExecutablePath() {//NEEDS TO BE AT THE TOP OF HERE DON'T MOVE ME
+    return std::filesystem::current_path().string();
+}
+
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-#define REGULAR_FONT R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Karla-Regular.ttf)"
-#define SPECIAL_FONT  R"(C:\Users\user\CLionProjects\CPPProjects\FinalProject\imgui-1.90.8\imgui-1.90.8\misc\fonts\Pacifico-Regular.ttf)"
+#define REGULAR_FONT "imgui-1.90.8/misc/fonts/Karla-Regular.ttf"
+#define SPECIAL_FONT "imgui-1.90.8/misc/fonts/Pacifico-Regular.ttf"
 
-#define USER_DIRECTORY "C:/Users/user/CLionProjects/CPPProjects/FinalProject/users/"
+#define USER_DIRECTORY "./users/"
 #define FONT_SIZE 24.0f
 
 typedef struct Movie {
@@ -99,7 +104,8 @@ GLuint LoadWelcomeImage(const char* filename)
     int width, height, channels;
     unsigned char* data = stbi_load(filename, &width, &height, &channels, 0);
     if (!data) {
-        std::cerr << "Failed to load welcome image" << std::endl;
+        std::cerr << "Failed to load welcome image: " << filename << std::endl;
+        std::cerr << "STB Error: " << stbi_failure_reason() << std::endl;
         return 0;
     }
 
@@ -116,9 +122,20 @@ GLuint LoadWelcomeImage(const char* filename)
 }
 
 void LoadFonts(ImGuiIO& io) {
-    io.Fonts->AddFontFromFileTTF(REGULAR_FONT, FONT_SIZE);
-    io.Fonts->AddFontFromFileTTF(SPECIAL_FONT, 45.0f);
-    io.Fonts->AddFontFromFileTTF(SPECIAL_FONT, 60.0f);
+    std::string exePath = GetExecutablePath();
+    std::string regularFontPath = exePath + "/" + REGULAR_FONT;
+    std::string specialFontPath = exePath + "/" + SPECIAL_FONT;
+
+    ImFont* regularFont = io.Fonts->AddFontFromFileTTF(regularFontPath.c_str(), FONT_SIZE);
+    ImFont* specialFont45 = io.Fonts->AddFontFromFileTTF(specialFontPath.c_str(), 45.0f);
+    ImFont* specialFont60 = io.Fonts->AddFontFromFileTTF(specialFontPath.c_str(), 60.0f);
+
+    if (regularFont == nullptr || specialFont45 == nullptr || specialFont60 == nullptr) {
+        std::cerr << "Failed to load fonts. Check file paths." << std::endl;
+        std::cerr << "Regular font path: " << regularFontPath << std::endl;
+        std::cerr << "Special font path: " << specialFontPath << std::endl;
+    }
+
     io.Fonts->Build();
 }
 
@@ -174,7 +191,11 @@ int main() {
     ImGui::StyleColorsDark();
     LoadFonts(io);
 
-    GLuint welcome_texture = LoadWelcomeImage("C:/Users/user/CLionProjects/CPPProjects/FinalProject/images/AGM.jpg");
+    std::string welcomeImagePath = GetExecutablePath() + "/images/AGM.jpg";
+    GLuint welcome_texture = LoadWelcomeImage(welcomeImagePath.c_str());
+    if (welcome_texture == 0) {
+        std::cerr << "Failed to load welcome image from: " << welcomeImagePath << std::endl;
+    }
 
     // Setup Platform/Renderer backends
     if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
@@ -301,7 +322,7 @@ int main() {
         // Left column: Movie details or Welcome screen
         ImGui::BeginChild("LeftColumn", ImVec2(column_width, display_h - 100), true);
         if (first_run) {
-            ImGui::SetCursorPosY(50);  // Add some top padding
+            ImGui::SetCursorPosY(40);  // Add some top padding
             ImGui::PushFont(specialFont48);
 
             const char* welcome_lines[] = { "Welcome", "To", "AGM" };
@@ -314,7 +335,7 @@ int main() {
             ImGui::PopFont();
 
             // Image below the text
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 30);  // Add some space between text and image
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 20);  // Add some space between text and image
 
             // Calculate the aspect ratio of the image
             float aspect_ratio = 1.0f;  // Assuming the image is square
@@ -323,6 +344,19 @@ int main() {
 
             ImGui::SetCursorPosX((column_width - image_width) / 2);  // Center the image
             ImGui::Image((void*)(intptr_t)welcome_texture, ImVec2(image_width, image_height));
+
+            // Add the new text below the image
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 15);  // Add some space between image and new text
+            ImGui::PushFont(specialFont48);  // Use the same special font as "Welcome to AGM"
+            const char* greeting_text = "Greetings, what movie";
+            const char* greeting_text2 = "would you like to see today?";
+            float greeting_width = ImGui::CalcTextSize(greeting_text).x;
+            float greeting_width2 = ImGui::CalcTextSize(greeting_text2).x;
+            ImGui::SetCursorPosX((column_width - greeting_width) / 2);  // Center the text
+            ImGui::TextColored(ImVec4(0.0f, 0.4f, 1.0f, 1.0f), "%s", greeting_text);
+            ImGui::SetCursorPosX((column_width - greeting_width2) / 2);  // Center the second line
+            ImGui::TextColored(ImVec4(0.0f, 0.4f, 1.0f, 1.0f), "%s", greeting_text2);
+            ImGui::PopFont();
         }
 
         else if (selected_movie_index != -1 && !selected_movie.title.empty()) {
@@ -822,7 +856,9 @@ bool IsInWatchList(const std::string& title) {
 void LoadWatchList(const std::string& username) {
     watch_list.clear();
     watch_list_titles.clear();
-    fs::path user_file = fs::path(USER_DIRECTORY) / (username + ".txt");
+    std::string exePath = GetExecutablePath();
+    std::string userDirPath = exePath + "/" + USER_DIRECTORY;
+    fs::path user_file = fs::path(userDirPath) / (username + ".txt");
     std::ifstream file(user_file);
     if (file.is_open()) {
         std::string line;
@@ -841,11 +877,14 @@ void LoadWatchList(const std::string& username) {
 }
 
 bool UserLogin(const std::string& username) {
-    if (!fs::exists(USER_DIRECTORY)) {
-        fs::create_directory(USER_DIRECTORY);
+    std::string exePath = GetExecutablePath();
+    std::string userDirPath = exePath + "/" + USER_DIRECTORY;
+
+    if (!fs::exists(userDirPath)) {
+        fs::create_directory(userDirPath);
     }
 
-    fs::path user_file = fs::path(USER_DIRECTORY) / (username + ".txt");
+    fs::path user_file = fs::path(userDirPath) / (username + ".txt");
     if (fs::exists(user_file)) {
         // User exists, load their watch list
         current_user = username;
@@ -877,7 +916,9 @@ void Logout() {
 // Add this function to save the watch list
 void SaveWatchList() {
     if (current_user.empty()) return;
-    fs::path user_file = fs::path(USER_DIRECTORY) / (current_user + ".txt");
+    std::string exePath = GetExecutablePath();
+    std::string userDirPath = exePath + "/" + USER_DIRECTORY;
+    fs::path user_file = fs::path(userDirPath) / (current_user + ".txt");
     std::ofstream file(user_file);
     if (file.is_open()) {
         for (const auto& movie : watch_list) {
