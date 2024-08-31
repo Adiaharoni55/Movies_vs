@@ -68,7 +68,7 @@ else()
 endif()
 
 # Add your executable
-add_executable(final movies.cpp ${GLAD_SRC} ${IMGUI_SRC})
+add_executable(final main.cpp ${GLAD_SRC} ${IMGUI_SRC})
 
 # Link against required libraries
 target_link_libraries(final
