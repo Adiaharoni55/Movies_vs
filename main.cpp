@@ -157,6 +157,7 @@ void read_api_key();
 
 // Main
 int main() {
+    std::cout << "hello\n";
     read_api_key();
 
     // Initialize GLFW
