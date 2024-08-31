@@ -1,0 +1,7 @@
+cmake-build-debug/
+.idea/
+*.o
+*.exe
+.DS_Store
+debug/
+
