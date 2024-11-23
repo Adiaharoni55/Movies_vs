@@ -1,8 +1,9 @@
 ## Description
 This application is a graphical user interface (GUI) program that allows users to search for movie information, view details about selected movies, and maintain a personal watch list. It uses the OMDb API to fetch movie data and displays it in an interactive interface.
+Environment: Visual Studio, c++.
 
 ## Necessary
-- after first download do:
+after first download do:
 1. proporties settings:
    - right click on your project inside the "solution explorer".
    - select properties.
